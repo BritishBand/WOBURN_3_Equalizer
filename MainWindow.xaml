@@ -1,0 +1,86 @@
+<Window x:Class="WoburnEQ.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="WOBURN III EQ"
+        Width="280" Height="230"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        Topmost="True"
+        Deactivated="Window_Deactivated">
+
+    <Border Background="#2D2D2D" CornerRadius="8" Padding="16" Margin="8">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.5" />
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+                <Ellipse Width="8" Height="8" x:Name="StatusDot" Fill="#FF4444" Margin="0,0,8,0" VerticalAlignment="Center" />
+                <TextBlock Text="WOBURN III" Foreground="White" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
+            </StackPanel>
+
+            <!-- Bass -->
+            <Grid Grid.Row="1" Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="55" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="28" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="Bass" Foreground="#CCCCCC" VerticalAlignment="Center" />
+                <Slider Grid.Column="1" x:Name="BassSlider" Minimum="0" Maximum="10"
+                        IsSnapToTickEnabled="True" TickFrequency="1"
+                        ValueChanged="BassSlider_ValueChanged"
+                        VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2" x:Name="BassValue" Text="0" Foreground="White"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold" />
+            </Grid>
+
+            <!-- Treble -->
+            <Grid Grid.Row="2" Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="55" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="28" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="Treble" Foreground="#CCCCCC" VerticalAlignment="Center" />
+                <Slider Grid.Column="1" x:Name="TrebleSlider" Minimum="0" Maximum="10"
+                        IsSnapToTickEnabled="True" TickFrequency="1"
+                        ValueChanged="TrebleSlider_ValueChanged"
+                        VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2" x:Name="TrebleValue" Text="0" Foreground="White"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold" />
+            </Grid>
+
+            <!-- Volume -->
+            <Grid Grid.Row="3" Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="55" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="28" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="Volume" Foreground="#CCCCCC" VerticalAlignment="Center" />
+                <Slider Grid.Column="1" x:Name="VolumeSlider" Minimum="0" Maximum="31"
+                        IsSnapToTickEnabled="True" TickFrequency="1"
+                        ValueChanged="VolumeSlider_ValueChanged"
+                        VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2" x:Name="VolumeValue" Text="0" Foreground="White"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold" />
+            </Grid>
+
+            <!-- Status -->
+            <TextBlock Grid.Row="4" x:Name="StatusText" Text="Connecting..."
+                       Foreground="#888888" FontSize="11" />
+        </Grid>
+    </Border>
+</Window>
