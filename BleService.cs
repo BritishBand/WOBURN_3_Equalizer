@@ -1,3 +1,4 @@
+using System.IO;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.Advertisement;
@@ -8,11 +9,15 @@ namespace WoburnEQ;
 public class BleService : IDisposable
 {
     private const string DeviceName = "WOBURN III";
+    private static readonly string LogPath = Path.Combine(
+        AppContext.BaseDirectory, "woburn.log");
     private static readonly Guid EqServiceUuid = Guid.Parse("0000aa00-0000-1000-8000-00805f9b34fb");
     private static readonly Guid EqCharUuid = Guid.Parse("0000aa16-0000-1000-8000-00805f9b34fb");
     private static readonly Guid VolumeCharUuid = Guid.Parse("0000aa08-0000-1000-8000-00805f9b34fb");
 
     private BluetoothLEDevice? _device;
+    private GattSession? _session;
+    private GattDeviceService? _service;
     private GattCharacteristic? _eqChar;
     private GattCharacteristic? _volumeChar;
     private bool _connected;
@@ -24,48 +29,134 @@ public class BleService : IDisposable
     public event Action<bool>? ConnectionChanged;
     public event Action<string>? StatusUpdated;
 
+    private void Log(string message)
+    {
+        var line = $"{DateTime.Now:HH:mm:ss.fff} {message}";
+        try { File.AppendAllText(LogPath, line + Environment.NewLine); } catch { }
+        StatusUpdated?.Invoke(message);
+    }
+
     public async Task ConnectAsync()
     {
-        StatusUpdated?.Invoke("Scanning...");
-        var address = await ScanForDeviceAsync();
+        try
+        {
+            await ConnectInternalAsync();
+        }
+        catch
+        {
+            Dispose();
+            throw;
+        }
+    }
 
-        _device = await BluetoothLEDevice.FromBluetoothAddressAsync(address);
+    private async Task ConnectInternalAsync()
+    {
+        Log("Scanning...");
+        var (address, addressType) = await ScanForDeviceAsync();
+
+        Log($"Connecting ({addressType})...");
+        _device = await BluetoothLEDevice.FromBluetoothAddressAsync(address, addressType);
         if (_device == null)
             throw new Exception($"{DeviceName} not found");
 
-        StatusUpdated?.Invoke($"Found {_device.Name}");
+        Log($"Found {_device.Name}");
+
+        Log("Requesting access...");
+        var access = await _device.RequestAccessAsync();
+        Log($"Access: {access}");
+
+        _session = await GattSession.FromDeviceIdAsync(_device.BluetoothDeviceId);
+        _session.MaintainConnection = true;
 
         var pairing = _device.DeviceInformation.Pairing;
-        if (!pairing.IsPaired)
-            await pairing.PairAsync();
+        Log($"Paired: {pairing.IsPaired}, CanPair: {pairing.CanPair}");
+        if (!pairing.IsPaired && pairing.CanPair)
+        {
+            var custom = pairing.Custom;
+            custom.PairingRequested += (sender, args) =>
+            {
+                Log($"PairingRequested: {args.PairingKind}");
+                args.Accept();
+            };
 
-        var servicesResult = await _device.GetGattServicesForUuidAsync(
-            EqServiceUuid, BluetoothCacheMode.Uncached);
-        if (servicesResult.Status != GattCommunicationStatus.Success || servicesResult.Services.Count == 0)
+            using var pairCts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            try
+            {
+                var pairResult = await custom.PairAsync(
+                    Windows.Devices.Enumeration.DevicePairingKinds.ConfirmOnly |
+                    Windows.Devices.Enumeration.DevicePairingKinds.ConfirmPinMatch,
+                    Windows.Devices.Enumeration.DevicePairingProtectionLevel.EncryptionAndAuthentication
+                ).AsTask().WaitAsync(pairCts.Token);
+                Log($"Pair: {pairResult.Status}");
+            }
+            catch (OperationCanceledException)
+            {
+                Log("Pair: timeout");
+            }
+
+            Log($"Paired after: {pairing.IsPaired}");
+        }
+
+        Log("Reading GATT services...");
+
+        GattDeviceService? service = null;
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            try
+            {
+                var task = _device.GetGattServicesAsync(BluetoothCacheMode.Uncached).AsTask();
+                var allServices = await task.WaitAsync(cts.Token);
+                Log($"#{attempt}: {allServices.Status}, {allServices.Services.Count} svc");
+
+                if (allServices.Status == GattCommunicationStatus.Success)
+                {
+                    foreach (var s in allServices.Services)
+                    {
+                        Log($"  svc: {s.Uuid}");
+                        if (s.Uuid == EqServiceUuid)
+                            service = s;
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                Log($"#{attempt}: timeout");
+            }
+
+            if (service != null) break;
+            await Task.Delay(2000);
+        }
+
+        if (service == null)
             throw new Exception("EQ service not found");
 
-        var service = servicesResult.Services[0];
-        var charsResult = await service.GetCharacteristicsForUuidAsync(
-            EqCharUuid, BluetoothCacheMode.Uncached);
-        if (charsResult.Status != GattCommunicationStatus.Success || charsResult.Characteristics.Count == 0)
-            throw new Exception("EQ characteristic not found");
+        _service = service;
 
-        _eqChar = charsResult.Characteristics[0];
+        Log("Reading characteristics...");
+        var allChars = await service.GetCharacteristicsAsync(BluetoothCacheMode.Uncached);
+        Log($"Chars: {allChars.Status}, {allChars.Characteristics.Count} total");
+        foreach (var c in allChars.Characteristics)
+            Log($"  char: {c.Uuid} [{string.Join(",", c.CharacteristicProperties)}]");
+
+        _eqChar = allChars.Characteristics.FirstOrDefault(c => c.Uuid == EqCharUuid);
+        if (_eqChar == null)
+            throw new Exception("EQ characteristic not found");
 
         var eqNotify = await _eqChar.WriteClientCharacteristicConfigurationDescriptorAsync(
             GattClientCharacteristicConfigurationDescriptorValue.Notify);
         if (eqNotify == GattCommunicationStatus.Success)
             _eqChar.ValueChanged += OnEqValueChanged;
+        Log("EQ notify: " + eqNotify);
 
-        var volCharsResult = await service.GetCharacteristicsForUuidAsync(
-            VolumeCharUuid, BluetoothCacheMode.Uncached);
-        if (volCharsResult.Status == GattCommunicationStatus.Success && volCharsResult.Characteristics.Count > 0)
+        _volumeChar = allChars.Characteristics.FirstOrDefault(c => c.Uuid == VolumeCharUuid);
+        if (_volumeChar != null)
         {
-            _volumeChar = volCharsResult.Characteristics[0];
             var volNotify = await _volumeChar.WriteClientCharacteristicConfigurationDescriptorAsync(
                 GattClientCharacteristicConfigurationDescriptorValue.Notify);
             if (volNotify == GattCommunicationStatus.Success)
                 _volumeChar.ValueChanged += OnVolumeValueChanged;
+            Log("Vol notify: " + volNotify);
         }
 
         _connected = true;
@@ -103,10 +194,10 @@ public class BleService : IDisposable
 
         volume = Math.Clamp(volume, 0, 31);
         var data = new byte[] { (byte)volume };
-        var result = await _volumeChar.WriteValueAsync(data.AsBuffer());
-
-        if (result != GattCommunicationStatus.Success)
-            throw new Exception("Failed to write volume");
+        Log($"WriteVol: {volume}");
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        var result = await _volumeChar.WriteValueAsync(data.AsBuffer()).AsTask().WaitAsync(cts.Token);
+        Log($"WriteVol result: {result}");
     }
 
     public async Task<(int Bass, int Treble)> ReadEqAsync()
@@ -129,15 +220,15 @@ public class BleService : IDisposable
         treble = Math.Clamp(treble, 0, 10);
 
         var data = new byte[] { (byte)bass, 0xFF, 0xFF, 0xFF, (byte)treble };
-        var result = await _eqChar.WriteValueAsync(data.AsBuffer());
-
-        if (result != GattCommunicationStatus.Success)
-            throw new Exception("Failed to write EQ");
+        Log($"WriteEQ: bass={bass} treble={treble}");
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        var result = await _eqChar.WriteValueAsync(data.AsBuffer()).AsTask().WaitAsync(cts.Token);
+        Log($"WriteEQ result: {result}");
     }
 
-    private static async Task<ulong> ScanForDeviceAsync()
+    private static async Task<(ulong Address, BluetoothAddressType AddressType)> ScanForDeviceAsync()
     {
-        var tcs = new TaskCompletionSource<ulong>();
+        var tcs = new TaskCompletionSource<(ulong, BluetoothAddressType)>();
         var watcher = new BluetoothLEAdvertisementWatcher
         {
             ScanningMode = BluetoothLEScanningMode.Active
@@ -146,7 +237,7 @@ public class BleService : IDisposable
         watcher.Received += (_, args) =>
         {
             if (args.Advertisement.LocalName?.Contains(DeviceName, StringComparison.OrdinalIgnoreCase) == true)
-                tcs.TrySetResult(args.BluetoothAddress);
+                tcs.TrySetResult((args.BluetoothAddress, args.BluetoothAddressType));
         };
 
         watcher.Start();
@@ -164,8 +255,28 @@ public class BleService : IDisposable
 
     public void Dispose()
     {
+        if (_eqChar != null)
+        {
+            _eqChar.ValueChanged -= OnEqValueChanged;
+            _eqChar = null;
+        }
+
+        if (_volumeChar != null)
+        {
+            _volumeChar.ValueChanged -= OnVolumeValueChanged;
+            _volumeChar = null;
+        }
+
+        _service?.Dispose();
+        _service = null;
+
+        _session?.Dispose();
+        _session = null;
+
         _device?.Dispose();
         _device = null;
+
         _connected = false;
+        ConnectionChanged?.Invoke(false);
     }
 }

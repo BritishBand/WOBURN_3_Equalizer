@@ -16,8 +16,9 @@ public partial class MainWindow : Window
         _ble = ble;
         _ble.EqChanged += OnEqChanged;
         _ble.VolumeChanged += OnVolumeChanged;
-        _ble.StatusUpdated += status => Dispatcher.Invoke(() => StatusText.Text = status);
+        _ble.StatusUpdated += OnStatusUpdated;
         Loaded += OnLoaded;
+        Closed += OnClosed;
 
         BassSlider.PreviewMouseWheel += Slider_MouseWheel;
         TrebleSlider.PreviewMouseWheel += Slider_MouseWheel;
@@ -48,6 +49,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
+            _ble.Dispose();
             StatusText.Text = ex.Message;
         }
     }
@@ -120,6 +122,18 @@ public partial class MainWindow : Window
         var slider = (Slider)sender;
         slider.Value += e.Delta > 0 ? 1 : -1;
         e.Handled = true;
+    }
+
+    private void OnStatusUpdated(string status)
+    {
+        Dispatcher.Invoke(() => StatusText.Text = status);
+    }
+
+    private void OnClosed(object? sender, EventArgs e)
+    {
+        _ble.EqChanged -= OnEqChanged;
+        _ble.VolumeChanged -= OnVolumeChanged;
+        _ble.StatusUpdated -= OnStatusUpdated;
     }
 
     private void Window_Deactivated(object sender, EventArgs e)

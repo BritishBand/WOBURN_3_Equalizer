@@ -13,12 +13,9 @@ Marshall does not provide a desktop app for EQ control — only a mobile app (iO
 - Bluetooth adapter with BLE support
 - Marshall Woburn III paired via Bluetooth
 
-
-Or launch `WoburnEQ.exe` from the publish output. The app appears as a blue **W** icon in the system tray.
-
 ## Compatibility
 
-Tested on Marshall Woburn III (firmware 5.0.34). May work with other Marshall speakers that use the same BLE GATT service (`0000aa00`), but this has not been verified.
+Tested on Marshall Woburn III (firmware 5.0.34).
 
 ## License
 
