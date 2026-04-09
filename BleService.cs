@@ -83,11 +83,21 @@ public class BleService : IDisposable
             try
             {
                 var pairResult = await custom.PairAsync(
-                    Windows.Devices.Enumeration.DevicePairingKinds.ConfirmOnly |
-                    Windows.Devices.Enumeration.DevicePairingKinds.ConfirmPinMatch,
-                    Windows.Devices.Enumeration.DevicePairingProtectionLevel.EncryptionAndAuthentication
+                    Windows.Devices.Enumeration.DevicePairingKinds.ConfirmOnly,
+                    Windows.Devices.Enumeration.DevicePairingProtectionLevel.Default
                 ).AsTask().WaitAsync(pairCts.Token);
                 Log($"Pair: {pairResult.Status}");
+
+                if (pairResult.Status != Windows.Devices.Enumeration.DevicePairingResultStatus.Paired
+                    && pairResult.Status != Windows.Devices.Enumeration.DevicePairingResultStatus.AlreadyPaired)
+                {
+                    Log("Retrying pair with None protection...");
+                    pairResult = await custom.PairAsync(
+                        Windows.Devices.Enumeration.DevicePairingKinds.ConfirmOnly,
+                        Windows.Devices.Enumeration.DevicePairingProtectionLevel.None
+                    ).AsTask().WaitAsync(pairCts.Token);
+                    Log($"Pair retry: {pairResult.Status}");
+                }
             }
             catch (OperationCanceledException)
             {
@@ -195,9 +205,9 @@ public class BleService : IDisposable
         volume = Math.Clamp(volume, 0, 31);
         var data = new byte[] { (byte)volume };
         Log($"WriteVol: {volume}");
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-        var result = await _volumeChar.WriteValueAsync(data.AsBuffer()).AsTask().WaitAsync(cts.Token);
-        Log($"WriteVol result: {result}");
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var result = await _volumeChar.WriteValueWithResultAsync(data.AsBuffer()).AsTask().WaitAsync(cts.Token);
+        Log($"WriteVol result: {result.Status}, ProtocolError: {result.ProtocolError}");
     }
 
     public async Task<(int Bass, int Treble)> ReadEqAsync()
@@ -221,9 +231,9 @@ public class BleService : IDisposable
 
         var data = new byte[] { (byte)bass, 0xFF, 0xFF, 0xFF, (byte)treble };
         Log($"WriteEQ: bass={bass} treble={treble}");
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-        var result = await _eqChar.WriteValueAsync(data.AsBuffer()).AsTask().WaitAsync(cts.Token);
-        Log($"WriteEQ result: {result}");
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var result = await _eqChar.WriteValueWithResultAsync(data.AsBuffer()).AsTask().WaitAsync(cts.Token);
+        Log($"WriteEQ result: {result.Status}, ProtocolError: {result.ProtocolError}");
     }
 
     private static async Task<(ulong Address, BluetoothAddressType AddressType)> ScanForDeviceAsync()

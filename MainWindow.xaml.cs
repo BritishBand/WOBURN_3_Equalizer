@@ -88,7 +88,10 @@ public partial class MainWindow : Window
         {
             await _ble.WriteVolumeAsync(val);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Vol write: {ex.Message}";
+        }
     }
 
     private async void BassSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -101,7 +104,10 @@ public partial class MainWindow : Window
         {
             await _ble.WriteEqAsync(val, (int)TrebleSlider.Value);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"EQ write: {ex.Message}";
+        }
     }
 
     private async void TrebleSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -114,7 +120,10 @@ public partial class MainWindow : Window
         {
             await _ble.WriteEqAsync((int)BassSlider.Value, val);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"EQ write: {ex.Message}";
+        }
     }
 
     private void Slider_MouseWheel(object sender, MouseWheelEventArgs e)
