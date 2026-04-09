@@ -52,7 +52,7 @@ public partial class App : Application
         var workArea = screen.WorkingArea;
 
         _popup.Left = Math.Min(pos.X - 140, workArea.Right - 280);
-        _popup.Top = workArea.Bottom - 200;
+        _popup.Top = workArea.Bottom - 150;
         _popup.Show();
         _popup.Activate();
     }
