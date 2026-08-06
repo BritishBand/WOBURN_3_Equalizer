@@ -59,14 +59,9 @@ public partial class App : Application
 
 private static Icon CreateIcon()
     {
-        var bmp = new Bitmap(16, 16);
-        using var g = Graphics.FromImage(bmp);
-        g.Clear(Color.Transparent);
-        g.FillEllipse(Brushes.DodgerBlue, 1, 1, 14, 14);
-        g.DrawString("W", new Font("Segoe UI", 8, System.Drawing.FontStyle.Bold),
-            Brushes.White, 1, 1);
-        var handle = bmp.GetHicon();
-        return Icon.FromHandle(handle);
+        var uri = new Uri("pack://application:,,,/marshall.ico");
+        using var stream = System.Windows.Application.GetResourceStream(uri).Stream;
+        return new Icon(stream, new System.Drawing.Size(32, 32));
     }
 
     protected override void OnExit(ExitEventArgs e)
